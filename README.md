@@ -1,33 +1,17 @@
-# Musializer
+# Musializer-windows
+This repository will only be releasing musializer compiled on Windows 10 x86-64.
 
-*Music by [@nu11](https://soundcloud.com/nu11_ft) from [https://soundcloud.com/nu11_ft/nu11-wip-works-2016-2022](https://soundcloud.com/nu11_ft/nu11-wip-works-2016-2022) at 7:15*
-
-https://github.com/tsoding/musializer/assets/165283/b8932f2c-d9b3-4862-8dd0-35e1da409243
-
-## Quick Start
-
-Dependencies:
-- [raylib](https://www.raylib.com/) and all its transitive dependencies.
-
-*Only Linux is supported for now. Windows soon.*
-
-```console
-$ ./build.sh
-$ ./build/musializer
-```
-
-## Hot Reloading
-
-<!--
-TODO: Use rpath to eliminate the need for LD_LIBRARY_PATH
-- https://en.wikipedia.org/wiki/Rpath
--->
-
-```console
-$ export HOTRELOAD=1
-$ export LD_LIBRARY_PATH="./build/:$LD_LIBRARY_PATH"
-$ ./build.sh
-$ ./build/musializer
-```
-
-Keep the app running. Rebuild with `./build.sh`. Hot reload by focusing on the window of the app and pressing <kbd>r</kbd>.
+# Compiling on Windows
+1. Install MSYS2
+2. Install `clang` `mingw-w64-x86_64-raylib` `mingw-w64-x86_64-glfw` and `pkg-config`
+3. Set the `PKG_CONFIG_PATH` to find the `/mingw64/lib/pkgconfig` by running this command `PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/mingw64/lib/pkgconfig/`
+4. Compile the program with `./build.sh`
+5. Copy both shaders folder and fonts folder to the path where executable was built.
+6. Copy these dlls from `/mingw64/bin` to the path where executable was built.
+   1. `glfw3.dll`
+   2. `libgcc_s_seh-1.dll`
+   3. `libraylib.dll`
+   4. `libwinpthread-1.dll`
+7. Copy `msys-2.0.dll` from `/usr/bin` to the path where executable was built.
+8. Enter the path where executable was built, then make a new copy of `libgcc_s_seh-1.dll`, after that then rename that new `libgcc_s_seh-1.dll` to `msys-gcc_s-seh-1.dll`
+9. Enjoy!
