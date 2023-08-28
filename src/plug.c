@@ -3,9 +3,14 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <complex.h>
+
 #include "plug.h"
 
+#include <raylib.h>
 #include <rlgl.h>
+
+#define GLSL_VERSION 120
 
 #define N (1<<13)
 #define FONT_SIZE 69
@@ -14,7 +19,8 @@ typedef struct {
     Music music;
     Font font;
     Shader circle;
-    Shader smear;
+    int circle_radius_location;
+    int circle_power_location;
     bool error;
 } Plug;
 
@@ -74,8 +80,15 @@ void plug_init(void)
     memset(plug, 0, sizeof(*plug));
 
     plug->font = LoadFontEx("./fonts/Alegreya-Regular.ttf", FONT_SIZE, NULL, 0);
-    plug->circle = LoadShader(NULL, "./shaders/circle.fs");
-    plug->smear = LoadShader(NULL, "./shaders/smear.fs");
+    // TODO: Maybe we should try to keep compiling different versions of shaders
+    // until one of them works?
+    //
+    // If the shader can not be compiled maybe we could fallback to software rendering
+    // of the texture of a fuzzy circle? The shader does not really do anything particularly
+    // special.
+    plug->circle = LoadShader(NULL, TextFormat("./shaders/glsl%d/circle.fs", GLSL_VERSION));
+    plug->circle_radius_location = GetShaderLocation(plug->circle, "radius");
+    plug->circle_power_location = GetShaderLocation(plug->circle, "power");
 }
 
 Plug *plug_pre_reload(void)
@@ -93,33 +106,16 @@ void plug_post_reload(Plug *prev)
         AttachAudioStreamProcessor(plug->music.stream, callback);
     }
     UnloadShader(plug->circle);
-    plug->circle = LoadShader(NULL, "./shaders/circle.fs");
-    UnloadShader(plug->smear);
-    plug->smear = LoadShader(NULL, "./shaders/smear.fs");
+    plug->circle = LoadShader(NULL, TextFormat("./shaders/glsl%d/circle.fs", GLSL_VERSION));
+    plug->circle_radius_location = GetShaderLocation(plug->circle, "radius");
+    plug->circle_power_location = GetShaderLocation(plug->circle, "power");
 }
 
 void plug_update(void)
 {
-    if (IsMusicReady(plug->music)) {
-        UpdateMusicStream(plug->music);
-    }
-
-    if (IsKeyPressed(KEY_SPACE)) {
-        if (IsMusicReady(plug->music)) {
-            if (IsMusicStreamPlaying(plug->music)) {
-                PauseMusicStream(plug->music);
-            } else {
-                ResumeMusicStream(plug->music);
-            }
-        }
-    }
-
-    if (IsKeyPressed(KEY_Q)) {
-        if (IsMusicReady(plug->music)) {
-            StopMusicStream(plug->music);
-            PlayMusicStream(plug->music);
-        }
-    }
+    int w = GetRenderWidth();
+    int h = GetRenderHeight();
+    float dt = GetFrameTime();
 
     if (IsFileDropped()) {
         FilePathList droppedFiles = LoadDroppedFiles();
@@ -149,16 +145,27 @@ void plug_update(void)
         UnloadDroppedFiles(droppedFiles);
     }
 
-    int w = GetRenderWidth();
-    int h = GetRenderHeight();
-    float dt = GetFrameTime();
-
     BeginDrawing();
     ClearBackground(CLITERAL(Color) {
         0x15, 0x15, 0x15, 0xFF
     });
 
     if (IsMusicReady(plug->music)) {
+        UpdateMusicStream(plug->music);
+
+        if (IsKeyPressed(KEY_SPACE)) {
+            if (IsMusicStreamPlaying(plug->music)) {
+                PauseMusicStream(plug->music);
+            } else {
+                ResumeMusicStream(plug->music);
+            }
+        }
+
+        if (IsKeyPressed(KEY_Q)) {
+            StopMusicStream(plug->music);
+            PlayMusicStream(plug->music);
+        }
+
         // Apply the Hann Window on the Input - https://en.wikipedia.org/wiki/Hann_function
         for (size_t i = 0; i < N; ++i) {
             float t = (float)i/(N - 1);
@@ -190,6 +197,7 @@ void plug_update(void)
             out_log[i] /= max_amp;
         }
 
+        // Smooth out and smear the values
         for (size_t i = 0; i < m; ++i) {
             float smoothness = 8;
             out_smooth[i] += (out_log[i] - out_smooth[i])*smoothness*dt;
@@ -197,7 +205,10 @@ void plug_update(void)
             out_smear[i] += (out_smooth[i] - out_smear[i])*smearness*dt;
         }
 
+        // The width of a single bar
         float cell_width = (float)w/m;
+
+        // Global color parameters
         float saturation = 0.75f;
         float value = 1.0f;
 
@@ -220,7 +231,10 @@ void plug_update(void)
 
         Texture2D texture = { rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
 
-        BeginShaderMode(plug->smear);
+        // Display the Smears
+        SetShaderValue(plug->circle, plug->circle_radius_location, (float[1]){ 0.3f }, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(plug->circle, plug->circle_power_location, (float[1]){ 3.0f }, SHADER_UNIFORM_FLOAT);
+        BeginShaderMode(plug->circle);
         for (size_t i = 0; i < m; ++i) {
             float start = out_smear[i];
             float end = out_smooth[i];
@@ -259,6 +273,8 @@ void plug_update(void)
         EndShaderMode();
 
         // Display the Circles
+        SetShaderValue(plug->circle, plug->circle_radius_location, (float[1]){ 0.07f }, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(plug->circle, plug->circle_power_location, (float[1]){ 5.0f }, SHADER_UNIFORM_FLOAT);
         BeginShaderMode(plug->circle);
         for (size_t i = 0; i < m; ++i) {
             float t = out_smooth[i];
@@ -276,7 +292,6 @@ void plug_update(void)
             DrawTextureEx(texture, position, 0, 2*radius, color);
         }
         EndShaderMode();
-
     } else {
         const char *label;
         Color color;
@@ -294,5 +309,6 @@ void plug_update(void)
         };
         DrawTextEx(plug->font, label, position, plug->font.baseSize, 0, color);
     }
+
     EndDrawing();
 }
