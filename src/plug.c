@@ -25,6 +25,7 @@ typedef struct {
 } Plug;
 
 Plug *plug = NULL;
+float volume = 0.1f;
 
 float in_raw[N];
 float in_win[N];
@@ -32,6 +33,16 @@ float complex out_raw[N];
 float out_log[N];
 float out_smooth[N];
 float out_smear[N];
+
+// nix is on raylib 4.2.0 which doesn't have IsMusicReady
+bool IsMusicReady(Music music)
+{
+  return ((music.ctxData != NULL) &&          // Validate context loaded
+            (music.frameCount > 0) &&           // Validate audio frame count
+            (music.stream.sampleRate > 0) &&    // Validate sample rate is supported
+            (music.stream.sampleSize > 0) &&    // Validate sample size is supported
+            (music.stream.channels > 0));       // Validate number of channels supported
+}
 
 // Ported from https://rosettacode.org/wiki/Fast_Fourier_transform#Python
 void fft(float in[], size_t stride, float complex out[], size_t n)
@@ -117,6 +128,24 @@ void plug_update(void)
     int h = GetRenderHeight();
     float dt = GetFrameTime();
 
+    if (IsKeyPressed(KEY_UP)) {
+        if (IsMusicReady(plug->music)) {
+            if (volume <= 1.0f) {
+                volume += 0.1f;
+                SetMusicVolume(plug->music, volume);
+            }
+        }
+    }
+
+    if (IsKeyPressed(KEY_DOWN)) {
+        if (IsMusicReady(plug->music)) {
+            if (volume >= 0.1f) {
+                volume -= 0.1f;
+                SetMusicVolume(plug->music, volume);
+            }
+        }
+    }
+
     if (IsFileDropped()) {
         FilePathList droppedFiles = LoadDroppedFiles();
         if (droppedFiles.count > 0) {
@@ -135,7 +164,7 @@ void plug_update(void)
                 printf("music.stream.sampleRate = %u\n", plug->music.stream.sampleRate);
                 printf("music.stream.sampleSize = %u\n", plug->music.stream.sampleSize);
                 printf("music.stream.channels = %u\n", plug->music.stream.channels);
-                SetMusicVolume(plug->music, 0.5f);
+                SetMusicVolume(plug->music, volume);
                 AttachAudioStreamProcessor(plug->music.stream, callback);
                 PlayMusicStream(plug->music);
             } else {
